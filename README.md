@@ -1,2 +1,4 @@
 # CHaserOnlineManualClient
-This is the manual Client for CHaserOnline2016 running on js.
+Node.js で動く ChaserOnline2016 用のManual Clientです。
+
+
