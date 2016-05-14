@@ -1,80 +1,131 @@
+'use strict';
+
 const http = require('http');
 const readline = require('readline');
 
-//var domain = 'www7019ug.sakura.ne.jp';
-var domain = '127.0.0.1';
-var path = '/CHaserOnline003';
+//const domain = 'www7019ug.sakura.ne.jp';
+const domain = '127.0.0.1';
+const path = '/CHaserOnline003';
+
 var user = '';
 var password = '';
 var jsessionid ='';
 var roomNumber;
 var command2 = '';
 
-var rl = readline.createInterface({
+var options = {
+	hostname: domain,
+	method: 'GET',
+	port: 8080
+};
+
+const rl = readline.createInterface({
 	input: process.stdin,
 	output: process.stdout
-
 });
 
-var log = (l) => console.log(l)
+const log = (l) => console.log(l)
 
-var UserCheck = () => {
+// argsのurlにgetする非同期関数
+const request = (url) => {
 
-	rl.question('user=', (u) => {
-		user = u;
+	return new Promise( (resolve, reject) => {
 
-		rl.question('password=', (p) => {
+		options['path'] = url;
 
-			password = p;
+		let req = http.request(options , (res) => {
 
-			run();
-		});
-	});
-
-	var run = () => {
-
-		log(user);
-		log(password);
-
-		var options = {
-			hostname: domain,
-			path: path + '/user/UserCheck?user=' + user + '&pass=' + password,
-			method: 'GET'
-		}
-
-		var req = http.request(options , (res) => {
-
-			var body = '';
-
+			let body = '';
 			res.on('data', (chunk) => {
 				body += chunk;
 			});
-
 			res.on('end', () => {
-				// 
-				log(body)
-				log(JSON.stringify(res.headers))
-				//log(res.headers['set-cookie'])
-
-				// cookieからJSESSIONIDを取り出す
-				//var cookie = res.headers['set-cookie'][0]
-
-				//jsessionid = cookie.slice(0, cookie.indexOf(';'));
-
-				log(jsessionid);
-
-				// 分岐 : userCheckに失敗した場合と成功した場合
-				// 失敗した場合 (bodyにuser=とpass=が含まれている) => { もう一度userCheck }
-				// 成功した場合 (bodyにroomNumber=が含まれている) => { roomを選ぶ処理へ}
-
-				RoomNumberCheck();
+				resolve(body);
 			});
-
 		}).on('error', (e) => {
-
-			console.log(e.message);
+			reject(new Error(e.message));
 		}).end();
-	}
+	});
+};
+
+// CLIから値を読み込む非同期関数
+const prompt = (str) => {
+
+	return new Promise( (resolve, reject) => {
+
+		rl.question(str, (ans) => {
+			resolve(ans);
+		});
+	});
+};
+
+const UserCheck = () => {
+
+	const input = {
+		user : ()=> {
+
+			return new Promise( (resolve, reject) => {
+
+				prompt('user=').then((u) => {
+					resolve(u);
+				});
+			});
+		},
+		password : ()=> {
+
+			return new Promise( (resolve, reject) => {
+
+				prompt('password=').then((p) => {
+					resolve(p);
+				});
+			});
+		}
+	};
+
+	const inputAll = () => {
+
+		return new Promise((resolve, reject) => {
+
+			input.user().then((u) => {
+				input.password().then((p) => {
+					resolve({user: u, password : p});
+				});
+			});
+		});
+	};
+
+	inputAll().then((values) => {
+
+		log('values of inputAll');
+		console.log(values);
+
+		user = values.user;
+		password = values.password;
+
+		request(path + '/user/UserCheck?user=' + user + '&pass=' + password)
+
+		.then((body) => {
+
+			log(body);
+
+			// cookieからJSESSIONIDを取り出す
+
+			//let cookie = res.headers['set-cookie'][0]
+			//jsessionid = cookie.slice(0, cookie.indexOf(';'));
+
+			// 分岐 : userCheckに失敗した場合と成功した場合
+			// 失敗した場合 (bodyにuser=とpass=が含まれている) => { もう一度userCheck }
+			// 成功した場合 (bodyにroomNumber=が含まれている) => { roomを選ぶ処理へ}	
+
+
+			RoomNumberCheck();
+		})	
+
+		.catch((e) => {
+			console.log(e.message);
+
+		});
+	});
 }
 
 
