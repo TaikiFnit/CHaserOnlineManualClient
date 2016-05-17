@@ -1,45 +1,36 @@
 'use strict';
-
-const http = require('http');
+	
+var http = require('http');
+const Url = require('url');
 const readline = require('readline');
 
-//const domain = 'www7019ug.sakura.ne.jp';
-const domain = '127.0.0.1';
-const path = '/CHaserOnline003';
-
-var user = '';
-var password = '';
-var jsessionid ='';
-var roomNumber;
-var command2 = '';
-
-var options = {
-	hostname: domain,
-	method: 'GET',
-	port: 8080
-};
-
-const rl = readline.createInterface({
-	input: process.stdin,
-	output: process.stdout
-});
-
-const log = (l) => console.log(l)
+const Index = require('./Index.js');
+const CHaserOnline003 = require('./CHaserOnline003.js');
 
 // argsのurlにgetする非同期関数
-const request = (url) => {
+const request = (path) => {
 
 	return new Promise( (resolve, reject) => {
 
-		options['path'] = url;
+		const domain = 'www7019ug.sakura.ne.jp';
+
+		var options = {
+			hostname: domain,
+			method: 'GET',
+			port: 80,
+			path: '/CHaserOnline003/user/'
+		};
 
 		let req = http.request(options , (res) => {
 
 			let body = '';
+
 			res.on('data', (chunk) => {
 				body += chunk;
 			});
 			res.on('end', () => {
+				console.log('request end')
+				console.log(body);
 				resolve(body);
 			});
 		}).on('error', (e) => {
@@ -48,244 +39,93 @@ const request = (url) => {
 	});
 };
 
-// CLIから値を読み込む非同期関数
-const prompt = (str) => {
+const Dispatcher = class {
 
-	return new Promise( (resolve, reject) => {
+	constructor(u, m, h, b, p) {
+		this.url = u;
+		this.method = m;
+		this.headers = h;
+		this.body = b;
+		this.params = p;
+		console.log(u);
+		console.log(m);
+		console.log(h);
+		console.log(b);
+		console.log(p);
+	}
 
-		rl.question(str, (ans) => {
-			resolve(ans);
-		});
-	});
-};
+	run() {
+		return new Promise( (resolve, reject) => {
 
-const UserCheck = () => {
+			request('CHaserOnline003/user/').then((value) => {
+				console.log(' comp request')
+				console.log(value)
+				console.log('end value')
 
-	const input = {
-		user : ()=> {
+				// この時点でvalueにresponse html が格納されている
+				// したがって、ここでurlに応じて、jsonデータにフォーマットしてそのjsonをresolveに渡す
 
-			return new Promise( (resolve, reject) => {
-
-				prompt('user=').then((u) => {
-					resolve(u);
-				});
+				resolve();
 			});
-		},
-		password : ()=> {
 
-			return new Promise( (resolve, reject) => {
+			let array_url = this.url.split('/')
+			let controller_url = array_url[1];
+			let action_url = array_url[2];
 
-				prompt('password=').then((p) => {
-					resolve(p);
-				});
-			});
-		}
-	};
+			let controller;
 
-	const inputAll = () => {
+			switch(controller_url) {
 
-		return new Promise((resolve, reject) => {
+				case '' : 
+					controller = new Index();
+				break;
 
-			input.user().then((u) => {
-				input.password().then((p) => {
-					resolve({user: u, password : p});
-				});
-			});
+				case 'CHaserOnline003' :
+					controller = new CHaserOnline003();
+				break;
+			}
+
+			//controller.run().then(() => {
+			//	resolve();
+			//});
 		});
-	};
-
-	inputAll().then((values) => {
-
-		log('values of inputAll');
-		console.log(values);
-
-		user = values.user;
-		password = values.password;
-
-		request(path + '/user/UserCheck?user=' + user + '&pass=' + password)
-
-		.then((body) => {
-
-			log(body);
-
-			// cookieからJSESSIONIDを取り出す
-
-			//let cookie = res.headers['set-cookie'][0]
-			//jsessionid = cookie.slice(0, cookie.indexOf(';'));
-
-			// 分岐 : userCheckに失敗した場合と成功した場合
-			// 失敗した場合 (bodyにuser=とpass=が含まれている) => { もう一度userCheck }
-			// 成功した場合 (bodyにroomNumber=が含まれている) => { roomを選ぶ処理へ}	
-
-
-			RoomNumberCheck();
-		})	
-
-		.catch((e) => {
-			console.log(e.message);
-
-		});
-	});
+	}
 }
 
+var server = http.createServer();
 
-var RoomNumberCheck = () => {
+server.on('request', (request, response) => {
 
-	rl.question('roomNumber=', (r) => {
-		roomNumber = r;
+	let url = request.url;
+	let method = request.method;
+	let headers = request.headers;
+	let params = Url.parse( request.url, true );
+	let body = [];
 
-		run();
+	request
+	.on('data', (chunk) => {
+		body.push(chunk);
+	})
+	.on('end', () => {
+		body = Buffer.concat(body).toString();
+
+		main();
 	});
 
-	var run = () => {
+	let main = () => {
 
-		var options = {
-			hostname: domain,
-			path: path + '/user/RoomNumberCheck?roomNumber=' + roomNumber,
-			method: 'GET',
-			headers: {'Cookie': jsessionid}
-		}
+		let dispatcher = new Dispatcher(url, method, headers, body, params);
 
-		var req = http.request(options, (res) => {
-			log('in request');
+		dispatcher.run().then((value) => {
 
-			var body = '';
+			// このvalueはjsonに整形されたchaser serverからのresponse
+			// これをresponse.write
 
-			res.on('data', (chunk) => {
-				body += chunk;
-			});
+			console.log('fnit');
+			response.write('fnit');
+			response.end();
+		});
+	}
+});
 
-			res.on('end', () => {
-				// 
-				log('end');
-				log(body)
-
-				GetReadyCheck();
-			});
-		}).on('error', (e) => {
-
-			console.log(e.message);
-		}).end();
-	};
-};
-
-var GetReadyCheck = () => {
-
-	var run = () => {
-
-		var options = {
-			hostname: domain,
-			path: path + '/user/GetReadyCheck?command1=gr',
-			method: 'GET',
-			headers: {'Cookie': jsessionid}
-		}
-
-		var req = http.request(options, (res) => {
-
-			var body = '';
-
-			res.on('data', (chunk) => {
-				body += chunk;
-			});
-
-			res.on('end', () => {
-				// 
-				log('end');
-				log(body)
-
-				// getready の return code を取得
-				var returncode ='';
-
-
-				CommandCheck();
-			});
-		}).on('error', (e) => {
-
-			console.log(e.message);
-		}).end();
-	}	
-
-	run();
-};
-
-// CommandCheck?command2=wu
-var CommandCheck = () => {
-
-	rl.question('command2=', (a) => {
-
-		command2 = a;
-
-		run();
-	});
-
-	var run = () => {
-
-		var options = {
-			hostname: domain,
-			path: path + '/user/CommandCheck?command2=' + command2,
-			method: 'GET',
-			headers: {'Cookie': jsessionid}
-		}
-
-		var req = http.request(options, (res) => {
-
-			var body = '';
-
-			res.on('data', (chunk) => {
-				body += chunk;
-			});
-
-			res.on('end', () => {
-				// 
-				log('end');
-				log(body)
-
-				// action の return code を取得
-				// Action ReturnCode=1,1,1,1,0,1 
-				var returncode ='';
-
-				EndCommandCheck();
-			});
-		}).on('error', (e) => {
-
-			console.log(e.message);
-		}).end();
-	};
-};
-
-// EndCommandCheck?command3=%23
-var EndCommandCheck = () => {
-
-	var run = () => {
-
-		var options = {
-			hostname: domain,
-			path: path + '/user/EndCommandCheck?command3=%23',
-			method: 'GET',
-			headers: {'Cookie': jsessionid}
-		}
-
-		var req = http.request(options, (res) => {
-
-			var body = '';
-
-			res.on('data', (chunk) => {
-				body += chunk;
-			});
-
-			res.on('end', () => {
-				// 
-				log('end');
-				log(body)
-
-				GetReadyCheck();
-			});
-		}).on('error', (e) => {
-			console.log(e.message);
-		}).end();
-	}	
-
-	run();
-}
-
-UserCheck();
+server.listen(8080);
